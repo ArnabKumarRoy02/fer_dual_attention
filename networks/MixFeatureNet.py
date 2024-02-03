@@ -207,3 +207,45 @@ class MixResidual(Module):
 
     def forward(self, x):
         return self.model(x)
+    
+
+class MixFeatureNet(Module):
+    def __init__(self, embedding_size=256, out_h=7, out_w=7):
+        super(MixFeatureNet, self).__init__()
+        # Input: 112 x 112
+        self.conv1 = Conv_Block(3, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1))
+        # 56 x 56
+        self.conv2_dw = Conv_Block(64, 64, kernel=(3, 3), stride=(1, 1), padding=(1, 1), groups=64)
+        self.conv23 = MixDepthWise(64, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=128, kernel_size=[3, 5, 7], split_out_channels=[64, 32, 32])
+
+        # 28 x 28
+        self.conv3 = MixResidual(64, num_blocks=9, groups=128, kernel=(3, 3), stride=(1, 1), padding=(1, 1), kernel_size=[3, 5], split_out_channels=[96, 32])
+        self.conv34 = MixDepthWise(64, 128, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=256, kernel_size=[3, 5, 7], split_out_channels=[128, 64, 64])
+
+        # 14 x 14
+        self.conv4 = MixResidual(128, num_blocks=9, num_blocks=16, groups=256, kernel=(3, 3), stride=(1, 1), padding=(1, 1), kernel_size=[3, 5], split_out_channels=[192, 64])
+        self.conv45 = MixDepthWise(128, 256, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=512*2, kernel_size=[3, 5, 7, 9], split_out_channels=[128*2, 128*2, 128*2, 128*2])
+
+        # 7 x 7
+        self.conv5 = MixResidual(256, num_blocks=6, groups=512, kernel=(3, 3), stride=(1, 1), padding=(1, 1), kernel_size=[3, 5, 7], split_out_channels=[86*2, 85*2, 85*2])
+        self.conv6_sep = Conv_Block(256, 512, kernel=(1, 1), stride=(1, 1), padding=(0, 0), groups=1)
+        self.conv6_dw = Linear_Block(512, 512, kernel=(out_h, out_w), stride=(1, 1), padding=(0, 0))
+        self.conv6_flatten = Flatten()
+        self.linear = Linear(512, embedding_size, bias=False)
+        self.bn = BatchNorm1d(embedding_size)
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.conv2_dw(out)
+        out = self.conv23(out)
+        out = self.conv3(out)
+        out = self.conv34(out)
+        out = self.conv4(out)
+        out = self.conv45(out)
+        out = self.conv5(out)
+        out = self.conv6_sep(out)
+        out = self.conv6_dw(out)
+        out = self.conv6_flatten(out)
+        out = self.linear(out)
+        out = self.bn(out)
+        return l2Norm(out)
