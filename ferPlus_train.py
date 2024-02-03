@@ -15,6 +15,7 @@ from torchvision import transforms, datasets
 
 import matplotlib.pyplot as plt
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
+from .networks.DDAM import DDAMNet
 
 eps = sys.float_info.epsilon
 
@@ -85,3 +86,91 @@ def plot_confusion_matrix(cm, classes,
     plt.tight_layout()
 
 classes = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Angry', 'Contempt']
+
+def run_training():
+    args = parse_args()
+    device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+
+    model = DDAMNet(num_classes=8, num_heads=args.num_head)
+    model.to(device)
+
+    # Data Transformation for Training
+    data_transform = transforms.Compose([
+        transforms.Resize((112, 112)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ColorJitter(),
+        transforms.RandomApply([
+            transforms.RandomRotation(10),
+            transforms.RandomCrop(112, padding=16)
+        ], p=0.2),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+        transforms.RandomErasing(scale=(0.02, 0.25)),
+    ])
+
+    # Data Loader
+    train_dataset = datasets.ImageFolder(f'{args.fer_path}/train', transform=data_transform)
+    print('Training dataset size: ', train_dataset.__len__())
+
+    train_loader = data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.workers,
+        shuffle=True,
+        pin_memory=True
+    )
+
+    # Data Transformation for Validation
+    data_transform_val = transforms.Compose([
+        transforms.Resize((112, 112)), 
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
+
+    # Data Loader for Validation
+    val_dataset = datasets.ImageFolder(f'{args.fer_path}/validation', transform=data_transform_val)
+    print('Validation dataset size: ', val_dataset.__len__())
+
+    val_loader = data.DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.workers,
+        shuffle=False,
+        pin_memory=True
+    )
+
+    criterion_cls = nn.CrossEntropyLoss()
+    criterion_att = AttentionLoss()
+
+    params = list(model.parameters())
+    optimizer = torch.optim.SGD(params, lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    best_acc = 0
+    for epoch in tqdm(range(1, args.epochs + 1)):
+        running_loss = 0.0
+        correct_sum = 0
+        iter_count = 0
+        model.train()
+
+        for (imgs, target) in train_loader:
+            iter_count += 1
+            optimizer.zero_grad()
+            imgs = imgs.to(device)
+            target = target.to(device)
+
+            output, features, heads = model(imgs)
+            loss = criterion_cls(output, target) + 0.1 * criterion_att(heads)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss
+            _, predicts = torch.max(output, 1)
+            correct_num = torch.eq(predicts, target).sum()
+            correct_sum += correct_num
+
+        acc = correct_sum.float() / float(train_dataset.__len__())
+        running_loss = running_loss / iter_count
+        tqdm.write('[Epoch %d] Training accuracy: %.4f. Loss: %.3f. LR %.6f' % (epoch, acc, running_loss,optimizer.param_groups[0]['lr']))
