@@ -15,7 +15,7 @@ from torchvision import transforms, datasets
 
 import matplotlib.pyplot as plt
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
-from .networks.DDAM import DDAMNet
+from networks.DDAM import DDAMNet
 
 eps = sys.float_info.epsilon
 
@@ -174,3 +174,73 @@ def run_training():
         acc = correct_sum.float() / float(train_dataset.__len__())
         running_loss = running_loss / iter_count
         tqdm.write('[Epoch %d] Training accuracy: %.4f. Loss: %.3f. LR %.6f' % (epoch, acc, running_loss,optimizer.param_groups[0]['lr']))
+
+        with torch.no_grad():
+            running_loss = 0.0
+            iter_count = 0
+            bingo_count = 0
+            sample_count = 0
+
+            # For calculating balanced accuracy
+            y_true = []
+            y_pred = []
+
+            model.eval()
+            for (imgs, targets) in val_loader:
+                imgs = imgs.to(device)
+                targets = targets.to(device)
+
+                output, features, heads = model(imgs)
+                loss = criterion_cls(output, targets) + 0.1 * criterion_att(heads)
+                running_loss += loss
+
+                _, predicts = torch.max(output, 1)
+                correct_num = torch.eq(predicts, targets)
+                bingo_count += correct_num.sum().cpu()
+                sample_count += output.size(0)
+
+                y_true.append(targets.cpu().numpy())
+                y_pred.append(predicts.cpu().numpy())
+
+                if iter_count == 0:
+                    all_predicted = predicts
+                    all_targeted = targets
+                else:
+                    all_predicted = torch.cat((all_predicted, predicts), 0)
+                    all_targeted = torch.cat((all_targeted, targets), 0)
+                iter_count += 1
+
+            running_loss = running_loss / iter_count
+            scheduler.step()
+
+            acc = bingo_count.float() / float(sample_count)
+            acc = np.around(acc.numpy(), 4)
+            best_acc = max(acc, best_acc)
+
+            y_true = np.concatenate(y_true)
+            y_pred = np.concatenate(y_pred)
+            balanced_acc = np.around(balanced_accuracy_score(y_true, y_pred), 4)
+
+            tqdm.write("[Epoch %d] Validation accuracy:%.4f. bacc:%.4f. Loss:%.3f" % (epoch, acc, balanced_acc, running_loss))
+            tqdm.write("Best_acc:" + str(best_acc))
+
+            if acc > 0.60 and acc == best_acc:
+                torch.save({
+                    'iter': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),},
+                    os.path.join('checkpoints', 'ferPlus_epoch' + str(epoch) + '_acc' + str(acc) + '_bacc' + str(balanced_acc) + '.pth'))
+                tqdm.write('Model saved')
+
+                # Compute the confusion matrix
+                matrix = confusion_matrix(all_targeted.data.cpu().numpy(), all_predicted.cpu().numpy())
+                np.set_printoptions(precision=2)
+                plt.figure(figsize=(10, 8))
+                # Plot normalized confusion matrix
+                plot_confusion_matrix(matrix, classes=classes, normalize=True, title= 'ferPlus Confusion Matrix (acc: %0.2f%%)' %(acc*100))
+                 
+                plt.savefig(os.path.join('checkpoints', "ferPlus_epoch" + str(epoch) + "_acc" + str(acc) + "_bacc" + str(balanced_acc) + ".png"))
+                plt.close()
+
+if __name__ == '__main__':
+    run_training()
