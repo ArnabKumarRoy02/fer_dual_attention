@@ -198,7 +198,7 @@ class Residual(Module):
     
 
 class MixResidual(Module):
-    def __init__(self, channel, num_blocks, groups, kernel= (3, 3), stride= (1, 1), padding= (1, 1), kernel_size= [3, 5], split_out_channels= [64, 64]):
+    def __init__(self, channel, num_blocks, groups, kernel, stride, padding, kernel_size, split_out_channels):
         super(MixResidual, self).__init__()
         modules = []
         for _ in range(num_blocks):
@@ -223,7 +223,7 @@ class MixFeatureNet(Module):
         self.conv34 = MixDepthWise(64, 128, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=256, kernel_size=[3, 5, 7], split_out_channels=[128, 64, 64])
 
         # 14 x 14
-        self.conv4 = MixResidual(128, num_blocks=9, num_blocks=16, groups=256, kernel=(3, 3), stride=(1, 1), padding=(1, 1), kernel_size=[3, 5], split_out_channels=[192, 64])
+        self.conv4 = MixResidual(128, num_blocks=9, groups=256, kernel=(3, 3), stride=(1, 1), padding=(1, 1), kernel_size=[3, 5], split_out_channels=[192, 64])
         self.conv45 = MixDepthWise(128, 256, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=512*2, kernel_size=[3, 5, 7, 9], split_out_channels=[128*2, 128*2, 128*2, 128*2])
 
         # 7 x 7

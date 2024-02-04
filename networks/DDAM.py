@@ -23,7 +23,7 @@ class Flatten(Module):
     
 
 class DDAMNet(Module):
-    def __init__(self, num_classes=7, num_heads=2, pretrained=True):
+    def __init__(self, num_classes=7, num_heads=2, pretrained=False):
         super(DDAMNet, self).__init__()
         net = MixFeatureNet.MixFeatureNet()
 
