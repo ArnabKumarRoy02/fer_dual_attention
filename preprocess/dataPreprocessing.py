@@ -10,7 +10,7 @@ def resize_image(root_folder, target_size):
                 file_path = os.path.join(item_path, file)
                 try:
                     img = Image.open(file_path)
-                    img = img.resize(target_size, Image.ANTIALIAS)
+                    img = img.resize(target_size)
                     img.save(file_path)
                     print(f"Resized {file_path}")
                 except Exception as e:
