@@ -23,12 +23,12 @@ class Flatten(Module):
     
 
 class DDAMNet(Module):
-    def __init__(self, num_classes=7, num_heads=2, pretrained=False):
+    def __init__(self, num_classes=7, num_heads=2, pretrained=True):
         super(DDAMNet, self).__init__()
         net = MixFeatureNet.MixFeatureNet()
 
         if pretrained:
-            net = torch.load(os.path.join('./pretrained', "MFN_ferplus.pth"))
+            net = torch.load(os.path.join('./pretrained', "MFN_msceleb.pth"))
 
         self.features = nn.Sequential(*list(net.children())[:-4])
         self.num_heads = num_heads

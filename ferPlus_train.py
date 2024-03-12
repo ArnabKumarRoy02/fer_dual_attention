@@ -90,6 +90,7 @@ classes = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Angry', 'C
 def run_training():
     args = parse_args()
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+    print('Using device: ', device)
 
     model = DDAMNet(num_classes=8, num_heads=args.num_head)
     model.to(device)
